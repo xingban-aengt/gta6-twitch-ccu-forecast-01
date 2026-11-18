@@ -84,22 +84,32 @@ def _is_training(comp):
     return _tier(comp) == "comparable" and not _is_simultaneous(comp)
 
 
+def _parse_ts(s):
+    """Parse an ISO-8601 timestamp to an aware datetime, or None."""
+    try:
+        return datetime.fromisoformat(str(s).replace("Z", "+00:00"))
+    except Exception:
+        return None
+
+
 def _curve(comp):
     """(log-ratio curve, hour-1 viewers) for a comparable's release day,
-    or None when its release day is incomplete (the target-history entry)."""
-    try:
-        ds = datetime.fromisoformat(comp["day_start"].replace("Z", "+00:00"))
-    except Exception:
+    or None when its release day is incomplete (the target-history entry).
+    Hourly points are matched by parsed timestamp, not by string, so a
+    differently formatted `from` (offset, fractional seconds) still lines
+    up with the release day's hours."""
+    ds = _parse_ts(comp.get("day_start", ""))
+    if ds is None:
         return None
     by = {}
     for h in comp.get("hourly", []):
         v = h.get("viewers")
-        if v and v > 0:
-            by[h["from"]] = v
+        t = _parse_ts(h.get("from", ""))
+        if v and v > 0 and t is not None:
+            by[t] = v
     vs = []
     for h in range(1, 25):
-        t = (ds + timedelta(hours=h - 1)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        v = by.get(t)
+        v = by.get(ds + timedelta(hours=h - 1))
         if v is None:
             return None
         vs.append(v)
